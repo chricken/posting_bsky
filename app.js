@@ -183,6 +183,16 @@ class BlueskyThreadPoster {
         // Input events for character counting, auto-expansion, and draft saving
         document.addEventListener('input', (e) => {
             if (e.target.tagName === 'TEXTAREA' && e.target.closest('.thread-posts')) {
+                // Clean up line breaks before periods
+                const cleanedText = this.cleanupLineBreaks(e.target.value);
+                if (cleanedText !== e.target.value) {
+                    const cursorPos = e.target.selectionStart;
+                    e.target.value = cleanedText;
+                    // Restore cursor position (adjust if text was shortened)
+                    const newCursorPos = Math.min(cursorPos, cleanedText.length);
+                    e.target.setSelectionRange(newCursorPos, newCursorPos);
+                }
+                
                 this.updateCharCounter(e.target);
                 this.handleAutoExpansion(e.target);
                 
@@ -191,6 +201,21 @@ class BlueskyThreadPoster {
                 this.draftSaveTimeout = setTimeout(() => {
                     this.saveDrafts();
                 }, 1000); // Save 1 second after user stops typing
+            }
+        });
+        
+        // Paste events for immediate cleanup
+        document.addEventListener('paste', (e) => {
+            if (e.target.tagName === 'TEXTAREA' && e.target.closest('.thread-posts')) {
+                // Use setTimeout to allow paste to complete first
+                setTimeout(() => {
+                    const cleanedText = this.cleanupLineBreaks(e.target.value);
+                    if (cleanedText !== e.target.value) {
+                        e.target.value = cleanedText;
+                        this.updateCharCounter(e.target);
+                        this.saveDrafts();
+                    }
+                }, 10);
             }
         });
 
@@ -495,6 +520,11 @@ class BlueskyThreadPoster {
     updateCharCounters() {
         const textareas = document.querySelectorAll('textarea');
         textareas.forEach(textarea => this.updateCharCounter(textarea));
+    }
+
+    cleanupLineBreaks(text) {
+        // Remove line breaks directly before periods
+        return text.replace(/\n+\./g, '.');
     }
 
     updateCharCounter(textarea) {
