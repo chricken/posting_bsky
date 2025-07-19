@@ -1,0 +1,22 @@
+{
+  "name": "bluesky-thread-poster",
+  "version": "1.0.0",
+  "description": "Eine Web-App zum Erstellen und Posten von Threads auf Bluesky",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server . -p 3000 -o",
+    "dev": "npx http-server . -p 3000 -o -c-1"
+  },
+  "keywords": [
+    "bluesky",
+    "social-media",
+    "thread",
+    "posting",
+    "web-app"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
