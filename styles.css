@@ -207,7 +207,73 @@ header p {
 .post-input textarea:focus {
     outline: none;
     border-color: #1DA1F2;
-    box-shadow: 0 0 0 2px rgba(29, 161, 242, 0.1);
+    box-shadow: 0 0 0 3px rgba(29, 161, 242, 0.1);
+}
+
+.textarea-container {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.textarea-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.bold-btn, .add-btn, .remove-btn {
+    background: #f8f9fa;
+    border: 1px solid #ccd6dd;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0;
+}
+
+.bold-btn:hover, .add-btn:hover, .remove-btn:hover {
+    background: #e9ecef;
+    border-color: #1DA1F2;
+    color: #1DA1F2;
+    transform: translateY(-1px);
+}
+
+.add-btn:hover {
+    border-color: #28a745;
+    color: #28a745;
+}
+
+.remove-btn:hover {
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.bold-btn:active, .add-btn:active, .remove-btn:active {
+    transform: translateY(0);
+    background: #dee2e6;
+}
+
+.bold-btn:focus, .add-btn:focus, .remove-btn:focus {
+    outline: 2px solid #1DA1F2;
+    outline-offset: 2px;
+}
+
+.add-btn:focus {
+    outline-color: #28a745;
+}
+
+.remove-btn:focus {
+    outline-color: #dc3545;
 }
 
 .char-counter {

@@ -43,7 +43,14 @@
             <div class="thread-posts" id="threadPosts">
                 <div class="post-input" data-post-index="0">
                     <label>Post 1 (Hauptpost):</label>
-                    <textarea placeholder="Schreibe deinen ersten Post hier..." maxlength="300" data-has-created-next="false"></textarea>
+                    <div class="textarea-container">
+                        <textarea placeholder="Schreibe deinen ersten Post hier..." maxlength="300" data-has-created-next="false"></textarea>
+                        <div class="textarea-buttons">
+                            <button class="bold-btn" title="Text in Unicode-Fettschrift umwandeln">𝐁</button>
+                            <button class="add-btn" title="Neuen Post darunter hinzufügen">➕</button>
+                            <button class="remove-btn" title="Diesen Post entfernen">🗑️</button>
+                        </div>
+                    </div>
                     <div class="char-counter">0/300</div>
                 </div>
             </div>

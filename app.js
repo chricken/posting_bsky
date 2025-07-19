@@ -1,9 +1,11 @@
 import settings from './settings.js';
+import { toggleBold } from './unicode-formatter.js';
 
 class BlueskyThreadPoster {
     constructor() {
         this.session = null;
         this.maxPostLength = settings.maxPostLength;
+        this.draftSaveTimeout = null;
         this.init();
     }
 
@@ -15,8 +17,8 @@ class BlueskyThreadPoster {
 
     saveCredentials(handle, appPassword) {
         try {
-            localStorage.setItem(settings.storageKeys.handle, handle);
-            localStorage.setItem(settings.storageKeys.appPassword, appPassword);
+            localStorage.setItem(settings.localStorage.handleKey, handle);
+            localStorage.setItem(settings.localStorage.passwordKey, appPassword);
         } catch (error) {
             console.warn('Could not save credentials to localStorage:', error);
         }
@@ -24,8 +26,8 @@ class BlueskyThreadPoster {
 
     loadSavedCredentials() {
         try {
-            const savedHandle = localStorage.getItem(settings.storageKeys.handle);
-            const savedPassword = localStorage.getItem(settings.storageKeys.appPassword);
+            const savedHandle = localStorage.getItem(settings.localStorage.handleKey);
+            const savedPassword = localStorage.getItem(settings.localStorage.passwordKey);
             
             if (savedHandle) {
                 document.getElementById('handle').value = savedHandle;
@@ -40,8 +42,8 @@ class BlueskyThreadPoster {
 
     clearSavedCredentials() {
         try {
-            localStorage.removeItem(settings.storageKeys.handle);
-            localStorage.removeItem(settings.storageKeys.appPassword);
+            localStorage.removeItem(settings.localStorage.handleKey);
+            localStorage.removeItem(settings.localStorage.passwordKey);
         } catch (error) {
             console.warn('Could not clear credentials from localStorage:', error);
         }
@@ -58,6 +60,96 @@ class BlueskyThreadPoster {
         this.showStatus('Gespeicherte Anmeldedaten gelöscht', 'info');
     }
 
+    // Draft management methods
+    saveDrafts() {
+        try {
+            const textareas = document.querySelectorAll('.thread-posts textarea');
+            const drafts = [];
+            
+            textareas.forEach((textarea, index) => {
+                const content = textarea.value.trim();
+                if (content) {
+                    drafts.push({
+                        index: index,
+                        content: content
+                    });
+                }
+            });
+            
+            if (drafts.length > 0) {
+                localStorage.setItem(settings.localStorage.draftsKey, JSON.stringify(drafts));
+            } else {
+                // Remove drafts if no content
+                localStorage.removeItem(settings.localStorage.draftsKey);
+            }
+        } catch (error) {
+            console.warn('Could not save drafts to localStorage:', error);
+        }
+    }
+
+    loadDrafts() {
+        try {
+            const savedDrafts = localStorage.getItem(settings.localStorage.draftsKey);
+            if (!savedDrafts) return;
+            
+            const drafts = JSON.parse(savedDrafts);
+            if (!Array.isArray(drafts)) return;
+            
+            // Ensure we have enough textareas for all drafts
+            const maxDraftIndex = Math.max(...drafts.map(d => d.index));
+            
+            // Add more textareas if needed - query textareas inside the loop to get updated count
+            while (document.querySelectorAll('.thread-posts textarea').length <= maxDraftIndex) {
+                this.addPost();
+            }
+            
+            // Load content into textareas
+            drafts.forEach(draft => {
+                const textareas = document.querySelectorAll('.thread-posts textarea');
+                if (textareas[draft.index]) {
+                    textareas[draft.index].value = draft.content;
+                    this.updateCharCounter(textareas[draft.index]);
+                }
+            });
+            
+            this.showStatus(`${drafts.length} Entwürfe wiederhergestellt`, 'success');
+        } catch (error) {
+            console.warn('Could not load drafts from localStorage:', error);
+        }
+    }
+
+    clearDrafts() {
+        try {
+            localStorage.removeItem(settings.localStorage.draftsKey);
+        } catch (error) {
+            console.warn('Could not clear drafts from localStorage:', error);
+        }
+    }
+
+    toggleTextareaBold(textarea) {
+        const currentText = textarea.value;
+        if (currentText.trim().length === 0) {
+            this.showStatus('Textarea ist leer', 'error');
+            return;
+        }
+        
+        const formattedText = toggleBold(currentText);
+        if (formattedText !== currentText) {
+            textarea.value = formattedText;
+            this.updateCharCounter(textarea);
+            
+            // Auto-save drafts after formatting
+            clearTimeout(this.draftSaveTimeout);
+            this.draftSaveTimeout = setTimeout(() => {
+                this.saveDrafts();
+            }, 500);
+            
+            this.showStatus('Text formatiert', 'success');
+        } else {
+            this.showStatus('Text bereits formatiert oder keine Änderung', 'info');
+        }
+    }
+
     bindEvents() {
         // Auth events
         document.getElementById('loginBtn').addEventListener('click', () => this.login());
@@ -69,12 +161,44 @@ class BlueskyThreadPoster {
         document.getElementById('addPostBtn').addEventListener('click', () => this.addPost());
         document.getElementById('removePostBtn').addEventListener('click', () => this.removePost());
         document.getElementById('postThreadBtn').addEventListener('click', () => this.postThread());
+        
+        // Bold button events (using event delegation)
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('bold-btn')) {
+                const textarea = e.target.closest('.textarea-container').querySelector('textarea');
+                if (textarea) {
+                    this.toggleTextareaBold(textarea);
+                }
+            }
+            
+            // Add button events (using event delegation)
+            if (e.target.classList.contains('add-btn')) {
+                const postInput = e.target.closest('.post-input');
+                if (postInput) {
+                    this.addPostBelow(postInput);
+                }
+            }
+            
+            // Remove button events (using event delegation)
+            if (e.target.classList.contains('remove-btn')) {
+                const postInput = e.target.closest('.post-input');
+                if (postInput) {
+                    this.removePostAt(postInput);
+                }
+            }
+        });
 
-        // Input events for character counting and auto-expansion
+        // Input events for character counting, auto-expansion, and draft saving
         document.addEventListener('input', (e) => {
-            if (e.target.tagName === 'TEXTAREA') {
+            if (e.target.tagName === 'TEXTAREA' && e.target.closest('.thread-posts')) {
                 this.updateCharCounter(e.target);
                 this.handleAutoExpansion(e.target);
+                
+                // Auto-save drafts with debouncing
+                clearTimeout(this.draftSaveTimeout);
+                this.draftSaveTimeout = setTimeout(() => {
+                    this.saveDrafts();
+                }, 1000); // Save 1 second after user stops typing
             }
         });
 
@@ -215,6 +339,9 @@ class BlueskyThreadPoster {
             <strong>Angemeldet als:</strong> ${this.session.handle}<br>
             <strong>DID:</strong> ${this.session.did}
         `;
+        
+        // Load any saved drafts
+        this.loadDrafts();
     }
 
     addPost() {
@@ -232,7 +359,14 @@ class BlueskyThreadPoster {
         
         postDiv.innerHTML = `
             <label>${settings.text.postLabelTemplate.replace('{index}', postCount + 1)}</label>
-            <textarea placeholder="${settings.text.postPlaceholderTemplate.replace('{index}', postCount + 1)}" maxlength="${this.maxPostLength}" data-has-created-next="false"></textarea>
+            <div class="textarea-container">
+                <textarea placeholder="${settings.text.postPlaceholderTemplate.replace('{index}', postCount + 1)}" maxlength="${this.maxPostLength}" data-has-created-next="false"></textarea>
+                <div class="textarea-buttons">
+                    <button class="bold-btn" title="Text in Unicode-Fettschrift umwandeln">𝐁</button>
+                    <button class="add-btn" title="Neuen Post darunter hinzufügen">➕</button>
+                    <button class="remove-btn" title="Diesen Post entfernen">🗑️</button>
+                </div>
+            </div>
             <div class="char-counter">0/${this.maxPostLength}</div>
         `;
 
@@ -245,6 +379,103 @@ class BlueskyThreadPoster {
         postDiv.querySelector('textarea').focus();
         
         this.updateCharCounters();
+    }
+
+    addPostBelow(currentPostInput) {
+        const threadPosts = document.getElementById('threadPosts');
+        const postCount = threadPosts.children.length;
+        
+        if (postCount >= settings.maxPostsPerThread) {
+            this.showStatus(`Maximum ${settings.maxPostsPerThread} Posts pro Thread empfohlen (Performance)`, 'error');
+            return;
+        }
+
+        // Find the index of the current post
+        const currentIndex = parseInt(currentPostInput.getAttribute('data-post-index'));
+        
+        // Create new post div
+        const postDiv = document.createElement('div');
+        postDiv.className = 'post-input fade-in';
+        postDiv.setAttribute('data-post-index', currentIndex + 1);
+        
+        postDiv.innerHTML = `
+            <label>${settings.text.postLabelTemplate.replace('{index}', currentIndex + 2)}</label>
+            <div class="textarea-container">
+                <textarea placeholder="${settings.text.postPlaceholderTemplate.replace('{index}', currentIndex + 2)}" maxlength="${this.maxPostLength}" data-has-created-next="false"></textarea>
+                <div class="textarea-buttons">
+                    <button class="bold-btn" title="Text in Unicode-Fettschrift umwandeln">𝐁</button>
+                    <button class="add-btn" title="Neuen Post darunter hinzufügen">➕</button>
+                    <button class="remove-btn" title="Diesen Post entfernen">🗑️</button>
+                </div>
+            </div>
+            <div class="char-counter">0/${this.maxPostLength}</div>
+        `;
+
+        // Insert the new post after the current one
+        currentPostInput.insertAdjacentElement('afterend', postDiv);
+        
+        // Update indices of all posts after the inserted one
+        this.reindexPosts();
+        
+        // Update remove button visibility
+        document.getElementById('removePostBtn').style.display = threadPosts.children.length > 1 ? 'inline-block' : 'none';
+        
+        // Focus new textarea
+        postDiv.querySelector('textarea').focus();
+        
+        this.updateCharCounters();
+    }
+
+    reindexPosts() {
+        const threadPosts = document.getElementById('threadPosts');
+        const postInputs = threadPosts.querySelectorAll('.post-input');
+        
+        postInputs.forEach((postInput, index) => {
+            // Update data-post-index attribute
+            postInput.setAttribute('data-post-index', index);
+            
+            // Update label text
+            const label = postInput.querySelector('label');
+            if (index === 0) {
+                label.textContent = settings.text.mainPostLabel;
+            } else {
+                label.textContent = settings.text.postLabelTemplate.replace('{index}', index + 1);
+            }
+            
+            // Update placeholder text
+            const textarea = postInput.querySelector('textarea');
+            if (index === 0) {
+                textarea.placeholder = settings.text.mainPostPlaceholder;
+            } else {
+                textarea.placeholder = settings.text.postPlaceholderTemplate.replace('{index}', index + 1);
+            }
+        });
+    }
+
+    removePostAt(postInput) {
+        const threadPosts = document.getElementById('threadPosts');
+        const postCount = threadPosts.children.length;
+        
+        // Don't allow removing the last remaining post
+        if (postCount <= 1) {
+            this.showStatus('Mindestens ein Post muss vorhanden bleiben', 'error');
+            return;
+        }
+        
+        // Remove the post
+        postInput.remove();
+        
+        // Update indices of all remaining posts
+        this.reindexPosts();
+        
+        // Update remove button visibility
+        const remainingCount = threadPosts.children.length;
+        document.getElementById('removePostBtn').style.display = remainingCount > 1 ? 'inline-block' : 'none';
+        
+        // Update character counters
+        this.updateCharCounters();
+        
+        this.showStatus('Post entfernt', 'success');
     }
 
     removePost() {
@@ -265,7 +496,15 @@ class BlueskyThreadPoster {
     }
 
     updateCharCounter(textarea) {
-        const counter = textarea.parentElement.querySelector('.char-counter');
+        // Find the counter in the post-input container (parent of textarea-container)
+        const postInput = textarea.closest('.post-input');
+        const counter = postInput ? postInput.querySelector('.char-counter') : null;
+        
+        if (!counter) {
+            console.warn('Character counter not found for textarea');
+            return;
+        }
+        
         const length = textarea.value.length;
         const maxLength = this.maxPostLength;
         
@@ -374,6 +613,9 @@ class BlueskyThreadPoster {
                     textarea.setAttribute('data-has-created-next', 'false');
                 });
                 this.updateCharCounters();
+                
+                // Clear saved drafts since posting was successful
+                this.clearDrafts();
                 
                 // Reset to single post input
                 const threadPosts = document.getElementById('threadPosts');

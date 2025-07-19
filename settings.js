@@ -15,9 +15,10 @@ const settings = {
     longThreadThreshold: 20,      // When to use longer delay
     
     // LocalStorage keys
-    storageKeys: {
-        handle: 'bluesky_handle',
-        appPassword: 'bluesky_app_password'
+    localStorage: {
+        handleKey: 'bluesky_handle',
+        passwordKey: 'bluesky_app_password',
+        draftsKey: 'bluesky_thread_drafts'
     },
     
     // Bluesky API endpoints
