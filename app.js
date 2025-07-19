@@ -1,5 +1,5 @@
 import settings from './settings.js';
-import { toggleBold } from './unicode-formatter.js';
+import { formatText } from './unicode-formatter.js';
 
 class BlueskyThreadPoster {
     constructor() {
@@ -162,16 +162,8 @@ class BlueskyThreadPoster {
         document.getElementById('removePostBtn').addEventListener('click', () => this.removePost());
         document.getElementById('postThreadBtn').addEventListener('click', () => this.postThread());
         
-        // Bold button events (using event delegation)
+        // Add button events (using event delegation)
         document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('bold-btn')) {
-                const textarea = e.target.closest('.textarea-container').querySelector('textarea');
-                if (textarea) {
-                    this.toggleTextareaBold(textarea);
-                }
-            }
-            
-            // Add button events (using event delegation)
             if (e.target.classList.contains('add-btn')) {
                 const postInput = e.target.closest('.post-input');
                 if (postInput) {
@@ -362,7 +354,12 @@ class BlueskyThreadPoster {
             <div class="textarea-container">
                 <textarea placeholder="${settings.text.postPlaceholderTemplate.replace('{index}', postCount + 1)}" maxlength="${this.maxPostLength}" data-has-created-next="false"></textarea>
                 <div class="textarea-buttons">
-                    <button class="bold-btn" title="Text in Unicode-Fettschrift umwandeln">𝐁</button>
+                    <select class="format-select" title="Textformatierung wählen">
+                        <option value="normal">Normal</option>
+                        <option value="bold">𝐅𝐞𝐭𝐭</option>
+                        <option value="italic">𝐼𝑡𝑎𝑙𝑖𝑐</option>
+                        <option value="script">𝒮𝒸𝓇𝒾𝓅𝓉</option>
+                    </select>
                     <button class="add-btn" title="Neuen Post darunter hinzufügen">➕</button>
                     <button class="remove-btn" title="Diesen Post entfernen">🗑️</button>
                 </div>
@@ -403,7 +400,12 @@ class BlueskyThreadPoster {
             <div class="textarea-container">
                 <textarea placeholder="${settings.text.postPlaceholderTemplate.replace('{index}', currentIndex + 2)}" maxlength="${this.maxPostLength}" data-has-created-next="false"></textarea>
                 <div class="textarea-buttons">
-                    <button class="bold-btn" title="Text in Unicode-Fettschrift umwandeln">𝐁</button>
+                    <select class="format-select" title="Textformatierung wählen">
+                        <option value="normal">Normal</option>
+                        <option value="bold">𝐅𝐞𝐭𝐭</option>
+                        <option value="italic">𝐼𝑡𝑎𝑙𝑖𝑐</option>
+                        <option value="script">𝒮𝒸𝓇𝒾𝓅𝓉</option>
+                    </select>
                     <button class="add-btn" title="Neuen Post darunter hinzufügen">➕</button>
                     <button class="remove-btn" title="Diesen Post entfernen">🗑️</button>
                 </div>
@@ -576,10 +578,20 @@ class BlueskyThreadPoster {
             return;
         }
 
-        const textareas = document.querySelectorAll('textarea');
-        const posts = Array.from(textareas)
-            .map(textarea => textarea.value.trim())
-            .filter(text => text.length > 0);
+        const postInputs = document.querySelectorAll('.post-input');
+        const posts = Array.from(postInputs)
+            .map(postInput => {
+                const textarea = postInput.querySelector('textarea');
+                const formatSelect = postInput.querySelector('.format-select');
+                const text = textarea.value.trim();
+                
+                if (text.length === 0) return null;
+                
+                // Apply formatting based on selectbox value
+                const formatStyle = formatSelect ? formatSelect.value : 'normal';
+                return formatText(text, formatStyle);
+            })
+            .filter(text => text !== null);
 
         if (posts.length === 0) {
             this.showStatus('Mindestens ein Post muss Text enthalten', 'error');
