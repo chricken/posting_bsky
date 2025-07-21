@@ -570,6 +570,64 @@ header p {
     font-family: monospace;
 }
 
+/* Progress Modal Styles */
+.progress-container {
+    margin-bottom: 15px;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 12px;
+    background-color: #e1e8ed;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background-color: #1DA1F2;
+    transition: width 0.3s ease;
+}
+
+.progress-time {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9em;
+    color: #657786;
+    margin-bottom: 10px;
+}
+
+.progress-post-info {
+    background-color: #f5f8fa;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #e1e8ed;
+}
+
+.progress-post-info h3 {
+    margin-top: 0;
+    font-size: 1em;
+    color: #657786;
+}
+
+.post-preview {
+    white-space: pre-wrap;
+    font-family: system-ui, -apple-system, sans-serif;
+    padding: 8px;
+    background-color: #ffffff;
+    border-radius: 4px;
+    border: 1px solid #e1e8ed;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
 .guide-content strong {
     font-weight: bold;
     color: #14171a;

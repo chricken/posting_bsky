@@ -47,7 +47,7 @@ export class InputField {
         this.element.innerHTML = `
             <label>${label}</label>
             <div class="textarea-container">
-                <textarea placeholder="${placeholder}" maxlength="${this.maxLength}" data-has-created-next="false" tabindex="${this.index + 1}"></textarea>
+                <textarea placeholder="${placeholder}" data-has-created-next="false" tabindex="${this.index + 1}"></textarea>
                 <div class="textarea-buttons">
                     <select class="format-select" title="Textformatierung wählen">
                         <option value="normal">Normal</option>

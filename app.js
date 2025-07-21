@@ -199,9 +199,28 @@ class BlueskyThreadPoster {
         // Add button events (using event delegation)
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('add-btn')) {
+                // Debug-Informationen ausgeben
+                // console.log('Add button clicked:', e.target);
+                
                 const postInput = e.target.closest('.post-input');
+                // console.log('Found parent post-input:', postInput);
+                
                 if (postInput) {
-                    this.addPostBelow(postInput);
+                    // Direkte Suche nach dem InputField durch data-post-index
+                    const postIndex = parseInt(postInput.getAttribute('data-post-index'));
+                    // console.log('Post index from element:', postIndex);
+                    
+                    // Suche das InputField-Objekt anhand des Index
+                    const field = this.inputFields.find(f => 
+                        parseInt(f.getElement().getAttribute('data-post-index')) === postIndex);
+                    
+                    if (field) {
+                        // console.log('Found matching InputField object, using its element');
+                        this.addPostBelow(field.getElement());
+                    } else {
+                        // console.log('No matching InputField found, using DOM element directly');
+                        this.addPostBelow(postInput);
+                    }
                 }
             }
             
@@ -238,8 +257,8 @@ class BlueskyThreadPoster {
         // Remove all invisible characters, zero-width spaces, etc.
         cleanHandle = cleanHandle.replace(/[\u200B-\u200D\uFEFF\u202C\u202D\u202E]/g, '').trim();
         
-        console.log('Original handle:', JSON.stringify(handle));
-        console.log('Cleaned handle:', JSON.stringify(cleanHandle));
+        // console.log('Original handle:', JSON.stringify(handle));
+        // console.log('Cleaned handle:', JSON.stringify(cleanHandle));
         
         if (!cleanHandle.includes('.')) {
             this.showStatus('Handle muss vollständig sein (z.B. name.bsky.social)', 'error');
@@ -271,7 +290,7 @@ class BlueskyThreadPoster {
                 })
             });
 
-            console.log('Response status:', response.status);
+            // console.log('Response status:', response.status);
             
             if (!response.ok) {
                 let errorMessage = 'Anmeldung fehlgeschlagen';
@@ -299,7 +318,7 @@ class BlueskyThreadPoster {
             }
 
             this.session = await response.json();
-            console.log('Login successful for:', this.session.handle);
+            // console.log('Login successful for:', this.session.handle);
             
             // Save credentials to localStorage on successful login
             this.saveCredentials(cleanHandle, appPassword);
@@ -394,60 +413,113 @@ class BlueskyThreadPoster {
         // inputField.focus();
     }
 
+    /**
+     * Fügt ein neues Eingabefeld unter dem angegebenen Index ein
+     * Komplett überarbeitete Version mit robusterer Erkennung
+     */
     addPostBelow(currentPostInput) {
         const threadPosts = document.getElementById('threadPosts');
         const postCount = threadPosts.children.length;
         
+        // Prüfe zuerst die maximale Anzahl an Posts
         if (postCount >= settings.maxPostsPerThread) {
             this.showStatus(`Maximum ${settings.maxPostsPerThread} Posts pro Thread empfohlen (Performance)`, 'error');
             return;
         }
 
-        // Find the index of the current post
-        const currentIndex = parseInt(currentPostInput.getAttribute('data-post-index'));
-        
-        // Find position in inputFields array
-        const insertPosition = this.inputFields.findIndex(field => 
-            field.getElement() === currentPostInput || 
-            field.getElement().isEqualNode(currentPostInput));
-        
-        if (insertPosition === -1) {
-            console.error('Could not find input field for insertion position');
-            return;
-        }
-        
-        // Create new input field
-        const inputField = new InputField({
-            index: currentIndex + 1,
-            maxLength: this.maxPostLength,
-            onValueChange: () => {
-                clearTimeout(this.draftSaveTimeout);
-                this.draftSaveTimeout = setTimeout(() => {
-                    this.saveDrafts();
-                }, 1000);
-            },
-            onAutoExpand: (field) => {
-                const idx = this.inputFields.findIndex(f => f === field);
-                if (idx >= 0 && idx === this.inputFields.length - 1) {
-                    // If this is the last field and it has content, add a new field
-                    this.addPost();
+        try {
+            // Bestimme den Index des aktuellen Posts
+            let currentIndex = -1;
+            let insertPosition = -1;
+            
+            // Methode 1: Direkt über data-post-index
+            if (currentPostInput && currentPostInput.hasAttribute && currentPostInput.hasAttribute('data-post-index')) {
+                currentIndex = parseInt(currentPostInput.getAttribute('data-post-index'), 10);
+                
+                // Finde die Position im Array mit diesem Index
+                for (let i = 0; i < this.inputFields.length; i++) {
+                    const field = this.inputFields[i];
+                    const fieldElement = field.getElement();
+                    if (fieldElement && parseInt(fieldElement.getAttribute('data-post-index'), 10) === currentIndex) {
+                        insertPosition = i;
+                        break;
+                    }
                 }
             }
-        });
-        
-        // Insert the new input field after the current one
-        currentPostInput.insertAdjacentElement('afterend', inputField.getElement());
-        
-        // Update our inputFields array
-        this.inputFields.splice(insertPosition + 1, 0, inputField);
-        
-        // Update indices of all posts after the inserted one
-        this.reindexPosts();
-        
-        // Kein Update des Remove-Buttons mehr nötig, da dieser entfernt wurde
-        
-        // Focus new textarea
-        // inputField.focus();
+            
+            // Methode 2: Fallback - nutze die DOM-Reihenfolge
+            if (insertPosition === -1 && currentPostInput) {
+                // Sammle alle post-input Elemente
+                const allPostInputs = Array.from(threadPosts.querySelectorAll('.post-input'));
+                // Finde die Position des aktuellen Elements
+                const domIndex = allPostInputs.indexOf(currentPostInput);
+                
+                if (domIndex !== -1) {
+                    insertPosition = domIndex;
+                    currentIndex = domIndex;
+                }
+            }
+            
+            // Wenn immer noch keine Position gefunden, verwende die letzte Position
+            if (insertPosition === -1) {
+                insertPosition = this.inputFields.length - 1;
+                if (insertPosition >= 0) {
+                    currentIndex = parseInt(this.inputFields[insertPosition].getElement().getAttribute('data-post-index'), 10);
+                } else {
+                    // Wenn keine Eingabefelder vorhanden sind, füge am Anfang ein
+                    insertPosition = -1;
+                    currentIndex = -1;
+                }
+            }
+            
+            // Erstelle das neue Eingabefeld
+            const inputField = new InputField({
+                index: currentIndex + 1, // Index für das neue Feld ist eins höher
+                maxLength: this.maxPostLength,
+                onValueChange: () => {
+                    // Automatisches Speichern von Entwürfen
+                    clearTimeout(this.draftSaveTimeout);
+                    this.draftSaveTimeout = setTimeout(() => {
+                        this.saveDrafts();
+                    }, 1000);
+                },
+                onAutoExpand: (field) => {
+                    // Automatische Expansion bei Inhalt im letzten Feld
+                    const idx = this.inputFields.findIndex(f => f === field);
+                    if (idx >= 0 && idx === this.inputFields.length - 1) {
+                        this.addPost(); // Füge automatisch ein neues Feld am Ende hinzu
+                    }
+                }
+            });
+            
+            // Füge das DOM-Element an der richtigen Position ein
+            if (insertPosition === -1 || insertPosition >= this.inputFields.length) {
+                // Am Ende anfügen
+                threadPosts.appendChild(inputField.getElement());
+                this.inputFields.push(inputField);
+            } else {
+                // Nach dem aktuellen Element einfügen
+                const targetElement = this.inputFields[insertPosition].getElement();
+                targetElement.insertAdjacentElement('afterend', inputField.getElement());
+                // Im Array einfügen
+                this.inputFields.splice(insertPosition + 1, 0, inputField);
+            }
+            
+            // Aktualisiere die Indizes aller Posts
+            this.reindexPosts();
+            
+            // Erfolg melden
+            this.showStatus('Neuer Post hinzugefügt', 'success', 1000);
+            
+            // Fokus auf das neue Feld setzen
+            setTimeout(() => inputField.focus(), 10);
+            
+            return inputField;
+            
+        } catch (error) {
+            console.error('Fehler beim Hinzufügen eines Posts:', error);
+            this.showStatus('Fehler beim Hinzufügen eines Posts', 'error');
+        }
     }
 
     reindexPosts() {
@@ -519,9 +591,48 @@ class BlueskyThreadPoster {
             return;
         }
 
-        const posts = this.inputFields
-            .map(inputField => inputField.getFormattedValue())
-            .filter(text => text !== null);
+        // Debug-Log zur Fehlersuche
+        // console.log('Input fields before posting:', this.inputFields.length);
+        // this.inputFields.forEach((field, index) => {
+        //     console.log(`Field ${index}:`, JSON.stringify(field.getValue()));
+        // });
+
+        // Manuelle Aktualisierung aller Eingabefelder, um sicherzustellen,
+        // dass auch gerade bearbeitete Felder mit einbezogen werden
+        this.inputFields.forEach(field => {
+            // Wenn das Feld Text enthält (auch nur Leerzeichen), bereinigen
+            const rawValue = field.getValue();
+            // Bereinige den Text manuell
+            const cleanedText = field.cleanupLineBreaks(rawValue);
+            // Setze den bereinigten Text zurück (immer, auch bei leerem Feld)
+            field.setValue(cleanedText);
+        });
+        
+        // Sammle alle nicht-leeren Eingabefelder
+        const posts = [];
+        
+        // Debug: Alle Felder vor der Verarbeitung anzeigen
+        // console.log('Processing fields for thread posting:');
+        
+        for (let i = 0; i < this.inputFields.length; i++) {
+            const field = this.inputFields[i];
+            const value = field.getValue().trim();
+            
+            // Debug-Log
+            // console.log(`Field ${i} value:`, JSON.stringify(value));
+            
+            if (value) {
+                // Wende Formatierung an (bold, italic, etc.)
+                const formatStyle = field.getFormatStyle();
+                const formattedText = formatText(value, formatStyle);
+                // Debug-Log
+                // console.log(`Field ${i} formatted:`, formattedText);
+                posts.push(formattedText);
+            }
+        }
+        
+        // Debug-Log
+        // console.log('Final posts array:', posts);
 
         if (posts.length === 0) {
             this.showStatus('Mindestens ein Post muss Text enthalten', 'error');
@@ -582,7 +693,7 @@ class BlueskyThreadPoster {
                 // Add a single empty input field
                 this.addPost();
                 
-                document.getElementById('removePostBtn').style.display = 'none';
+                // Remove-Button-Update entfernt, da dieser Button nicht mehr existiert
             }
 
         } catch (error) {
@@ -604,8 +715,14 @@ class BlueskyThreadPoster {
             for (let i = 0; i < posts.length; i++) {
                 const postText = posts[i];
                 
-                // Update progress modal
-                this.updateProgress(i + 1, postText);
+                // Update progress modal with await to ensure update happens before proceeding
+                // Dies gibt dem DOM Zeit, sich zu aktualisieren
+                await new Promise(resolve => {
+                    this.updateProgress(i + 1, postText);
+                    // Kurzer Timeout, um DOM-Updates zu erlauben
+                    setTimeout(resolve, 50);
+                });
+                
                 const now = new Date().toISOString();
 
                 const postRecord = {
@@ -694,54 +811,97 @@ class BlueskyThreadPoster {
     }
 
     showProgressModal(totalPosts) {
+        // Initialize progress data
         this.progressData = {
             totalPosts: totalPosts,
             currentPost: 0,
             startTime: Date.now(),
             estimatedTotalTime: this.calculateEstimatedTime(totalPosts)
         };
+
+        // Create progress modal content using an array to avoid unwanted whitespace
+        const contentParts = [];
+        contentParts.push('<h2>Thread wird gepostet</h2>');
+        contentParts.push('<div class="progress-container">');
+        contentParts.push('  <div class="progress-info">');
+        contentParts.push(`    <span>Post <span id="currentPostNumber">0</span>/<span id="totalPosts">${totalPosts}</span></span>`);
+        contentParts.push('    <span id="progressPercentage">0%</span>');
+        contentParts.push('  </div>');
+        contentParts.push('  <div class="progress-bar">');
+        contentParts.push('    <div id="progressBarFill" class="progress-bar-fill" style="width: 0%"></div>');
+        contentParts.push('  </div>');
+        contentParts.push('  <div class="progress-time">');
+        contentParts.push('    <div>Vergangene Zeit: <span id="elapsedTime">0s</span></div>');
+        contentParts.push(`    <div>Geschätzte Restzeit: <span id="remainingTime">${this.formatTime(this.progressData.estimatedTotalTime)}</span></div>`);
+        contentParts.push('  </div>');
+        contentParts.push('</div>');
+        contentParts.push('<div class="progress-post-info">');
+        contentParts.push('  <h3>Aktueller Post:</h3>');
+        contentParts.push('  <div id="currentPostContent" class="post-preview">Vorbereitung...</div>');
+        contentParts.push('</div>');
         
-        document.getElementById('totalPosts').textContent = totalPosts;
-        document.getElementById('currentPostNumber').textContent = '0';
-        document.getElementById('progressPercentage').textContent = '0%';
-        document.getElementById('progressBarFill').style.width = '0%';
-        document.getElementById('elapsedTime').textContent = '0s';
-        document.getElementById('remainingTime').textContent = this.formatTime(this.progressData.estimatedTotalTime);
-        document.getElementById('currentPostContent').textContent = 'Vorbereitung...';
+        // Join without newlines to minimize whitespace
+        const content = contentParts.join('');
         
-        document.getElementById('progressModal').style.display = 'flex';
+        // Erstelle eine neue Modal-Instanz und speichere sie
+        const modal = new Modal();
+        modal.setContent(content);
+        modal.show();
+        
+        // Speichere die Modal-Instanz, damit wir sie später schließen können
+        this.progressModal = modal;
+        
+        // Füge dem Modal eine ID hinzu, damit wir die Elemente darin finden können
+        this.progressModalId = 'modal-progress-' + Date.now();
+        if (modal.overlay) {
+            modal.overlay.id = this.progressModalId;
+        }
     }
 
     updateProgress(currentPost, postContent) {
-        if (!this.progressData) return;
+        if (!this.progressData || !this.progressModal) return;
         
         this.progressData.currentPost = currentPost;
         const progress = (currentPost / this.progressData.totalPosts) * 100;
         const elapsedTime = Date.now() - this.progressData.startTime;
         
-        // Update UI elements
-        document.getElementById('currentPostNumber').textContent = currentPost;
-        document.getElementById('progressPercentage').textContent = Math.round(progress) + '%';
-        document.getElementById('progressBarFill').style.width = progress + '%';
-        document.getElementById('elapsedTime').textContent = this.formatTime(elapsedTime);
+        // Direkter Zugriff auf das content Element der Modal-Instanz
+        const contentElement = this.progressModal.content;
+        if (!contentElement) return;
+        
+        // Update UI elements innerhalb des modalen Dialogs
+        const currentPostNumberEl = contentElement.querySelector('#currentPostNumber');
+        const progressPercentageEl = contentElement.querySelector('#progressPercentage');
+        const progressBarFillEl = contentElement.querySelector('#progressBarFill');
+        const elapsedTimeEl = contentElement.querySelector('#elapsedTime');
+        const remainingTimeEl = contentElement.querySelector('#remainingTime');
+        const currentPostContentEl = contentElement.querySelector('#currentPostContent');
+        
+        if (currentPostNumberEl) currentPostNumberEl.textContent = currentPost;
+        if (progressPercentageEl) progressPercentageEl.textContent = Math.round(progress) + '%';
+        if (progressBarFillEl) progressBarFillEl.style.width = progress + '%';
+        if (elapsedTimeEl) elapsedTimeEl.textContent = this.formatTime(elapsedTime);
         
         // Calculate remaining time based on actual progress
         if (currentPost > 0) {
             const avgTimePerPost = elapsedTime / currentPost;
             const remainingPosts = this.progressData.totalPosts - currentPost;
             const estimatedRemainingTime = remainingPosts * avgTimePerPost;
-            document.getElementById('remainingTime').textContent = this.formatTime(estimatedRemainingTime);
+            if (remainingTimeEl) remainingTimeEl.textContent = this.formatTime(estimatedRemainingTime);
         }
         
-        // Update post content preview
-        const truncatedContent = postContent.length > 100 
-            ? postContent.substring(0, 100) + '...' 
-            : postContent;
-        document.getElementById('currentPostContent').textContent = truncatedContent;
+        // Update post content preview - zeige den vollständigen Text ohne Abschneiden
+        if (currentPostContentEl) currentPostContentEl.textContent = postContent;
     }
 
     hideProgressModal() {
-        document.getElementById('progressModal').style.display = 'none';
+        // Schließe das Modal mit der gespeicherten Instanz
+        if (this.progressModal) {
+            this.progressModal.hide();
+            this.progressModal = null;
+        }
+        
+        this.progressModalId = null;
         this.progressData = null;
     }
 
