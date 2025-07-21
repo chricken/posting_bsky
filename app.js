@@ -629,9 +629,26 @@ class BlueskyThreadPoster {
         }
 
         // Check for posts that are too long
-        const tooLongPosts = posts.filter(post => post.length > this.maxPostLength);
+        const tooLongPosts = [];
+        posts.forEach((post, index) => {
+            if (post.length > this.maxPostLength) {
+                tooLongPosts.push({
+                    index: index + 1,
+                    content: post,
+                    length: post.length
+                });
+            }
+        });
+        
         if (tooLongPosts.length > 0) {
-            this.showStatus(`Einige Posts sind zu lang (max. ${this.maxPostLength} Zeichen)`, 'error');
+            let errorMessage = `${tooLongPosts.length} Post${tooLongPosts.length > 1 ? 's' : ''} ${tooLongPosts.length > 1 ? 'sind' : 'ist'} zu lang (max. ${this.maxPostLength} Zeichen):\n\n`;
+            
+            tooLongPosts.forEach(post => {
+                const truncatedContent = post.content.length > 50 ? post.content.substring(0, 50) + '...' : post.content;
+                errorMessage += `Post ${post.index}: ${post.length} Zeichen\n"${truncatedContent}"\n\n`;
+            });
+            
+            this.showStatus(errorMessage, 'error');
             return;
         }
 
