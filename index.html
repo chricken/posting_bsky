@@ -61,8 +61,17 @@
             </div>
 
             <div class="thread-controls">
-                <button id="addPostBtn" class="btn btn-secondary">➕ Weiteren Post hinzufügen</button>
-                <button id="removePostBtn" class="btn btn-danger" style="display: none;">➖ Letzten Post entfernen</button>
+                <button id="clearAllBtn" class="btn btn-danger">🗑️ Alle Eingaben löschen</button>
+                <button id="showGuideBtn" class="btn btn-info">❓ Anleitung</button>
+            </div>
+
+            <div class="json-controls">
+                <button id="showJsonBtn" class="btn btn-secondary">🔍 Eingaben als JSON anzeigen</button>
+                <div class="file-input-container">
+                    <input type="file" id="jsonFileInput" accept="application/json" style="display: none;">
+                    <button id="loadJsonBtn" class="btn btn-secondary">📚 JSON-Datei laden</button>
+                </div>
+                <button id="pasteJsonBtn" class="btn btn-secondary">📋 JSON-Code einfügen</button>
             </div>
 
             <div class="post-controls">
@@ -111,6 +120,9 @@
         </div>
     </div>
 
+    <!-- UI-Komponenten - Reihenfolge ist wichtig! -->
+    <script src="components/Modal.js"></script>
+    <script src="components/GuideModal.js"></script>
     <script src="app.js" type="module"></script>
 </body>
 </html>

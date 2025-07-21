@@ -1,8 +1,0 @@
-Neu angelegte Eingabefelder sollen von Anfang an die Buttons haben
-Ein Button, um alle Eingaben zu entfernen
-Ein Button, der alle Inhalt des Localstorage als Modal-Fenster ausgibt
-Eine File-Eingabe, um JSON.Dateien mit Inhalten zu laden
-Leerzeichen vor Punkten entfernen
-Formatierte Bereiche sollen als solche markiert werden	
-Anleitung und readme
-"Einige Posts sind zu lang" muss sagen, welche Posts zu lang sind

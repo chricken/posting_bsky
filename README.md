@@ -5,27 +5,36 @@ Eine moderne Web-Anwendung zum Erstellen und Posten von längeren Threads auf Bl
 ## ✨ Features
 
 - **Einfache Authentifizierung** mit Bluesky Handle und App Password
-- **Dynamische Thread-Erstellung** mit mehreren Posts
+- **Dynamische Thread-Erstellung** mit mehreren Posts und individuellen Steuerungen
+- **Formatierung** von Posts (Normal, Code, Kursiv)
+- **JSON Import/Export** für einfache Übertragung und Bearbeitung von Threads
 - **Zeichenzähler** für jeden Post (300 Zeichen Limit)
+- **Automatische Textbereinigung** für optimales Textlayout (Entfernt Zeilenumbrüche vor Punktuation)
 - **Responsive Design** für Desktop und Mobile
-- **Moderne UI** mit schönen Animationen
+- **Moderne UI** mit Modals
 - **Frontend-only** - keine Server-Installation nötig
 
 ## 🚀 Installation und Start
 
 1. **Repository klonen oder Dateien herunterladen**
 
-2. **Dependencies installieren:**
+2. **Lokalen Server starten:**
+   Einfach eine der folgenden Methoden verwenden:
    ```bash
-   npm install
-   ```
+   # Mit Python
+   python -m http.server
+   
+   # Mit Node.js
+   npx serve
+   
+   # Mit PHP
+   php -S localhost:8000
 
-3. **Entwicklungsserver starten:**
-   ```bash
-   npm start
+   # Mit Live Server (Visual Studio Code)
+   
    ```
    
-   Die App öffnet sich automatisch im Browser unter `http://localhost:3000`
+   Die App ist dann im Browser unter der entsprechenden URL verfügbar (meist `http://localhost:8000` oder ähnlich)
 
 ## 🔧 Verwendung
 
@@ -38,9 +47,11 @@ Eine moderne Web-Anwendung zum Erstellen und Posten von längeren Threads auf Bl
 
 ### 2. Thread erstellen
 - Schreibe deinen ersten Post in das Hauptfeld
-- Klicke auf "➕ Weiteren Post hinzufügen" für zusätzliche Posts
+- Weitere Posts werden automatisch hinzugefügt oder mit dem + Button neben jedem Post
+- Wähle für jeden Post die gewünschte Formatierung (Normal, Code, Kursiv)
 - Jeder Post kann bis zu 300 Zeichen haben
-- Du kannst bis zu 10 Posts pro Thread erstellen
+- Du kannst bis zu 200 Posts pro Thread erstellen
+- Die automatische Textbereinigung entfernt Zeilenumbrüche vor Punktuation für optimale Lesbarkeit
 
 ### 3. Thread posten
 - Klicke auf "🚀 Thread posten"
@@ -78,7 +89,8 @@ Eine moderne Web-Anwendung zum Erstellen und Posten von längeren Threads auf Bl
 
 ### Benutzerfreundlichkeit
 - Echtzeit-Zeichenzähler mit Farbkodierung
-- Automatische Fokussierung neuer Textfelder
+- JSON Import/Export für einfache Thread-Übertragung
+- Automatische Textbereinigung für bessere Lesbarkeit
 - Intuitive Bedienung mit klaren Buttons
 - Statusmeldungen für alle Aktionen
 

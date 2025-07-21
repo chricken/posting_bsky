@@ -3,7 +3,7 @@
 const settings = {
     // Post settings
     maxPostLength: 300,
-    maxPostsPerThread: 50,
+    maxPostsPerThread: 200,
     
     // UI settings
     showCharacterWarningAt: 0.8, // 80% of maxPostLength

@@ -1,17 +1,18 @@
 import settings from './settings.js';
 import { formatText } from './unicode-formatter.js';
+import InputField from './components/InputField.js';
 
 class BlueskyThreadPoster {
     constructor() {
         this.session = null;
         this.maxPostLength = settings.maxPostLength;
         this.draftSaveTimeout = null;
+        this.inputFields = [];
         this.init();
     }
 
     init() {
         this.bindEvents();
-        this.updateCharCounters();
         this.loadSavedCredentials();
     }
 
@@ -63,15 +64,15 @@ class BlueskyThreadPoster {
     // Draft management methods
     saveDrafts() {
         try {
-            const textareas = document.querySelectorAll('.thread-posts textarea');
             const drafts = [];
             
-            textareas.forEach((textarea, index) => {
-                const content = textarea.value.trim();
+            this.inputFields.forEach((field, index) => {
+                const content = field.getValue().trim();
                 if (content) {
                     drafts.push({
                         index: index,
-                        content: content
+                        content: content,
+                        formatStyle: field.getFormatStyle() // Speichern der Formatierung
                     });
                 }
             });
@@ -95,20 +96,31 @@ class BlueskyThreadPoster {
             const drafts = JSON.parse(savedDrafts);
             if (!Array.isArray(drafts)) return;
             
-            // Ensure we have enough textareas for all drafts
+            // Ensure we have enough input fields for all drafts
             const maxDraftIndex = Math.max(...drafts.map(d => d.index));
             
-            // Add more textareas if needed - query textareas inside the loop to get updated count
-            while (document.querySelectorAll('.thread-posts textarea').length <= maxDraftIndex) {
+            // Clear existing input fields first
+            const threadPosts = document.getElementById('threadPosts');
+            while (threadPosts.firstChild) {
+                threadPosts.removeChild(threadPosts.firstChild);
+            }
+            this.inputFields = [];
+            
+            // Create required number of input fields
+            for (let i = 0; i <= maxDraftIndex; i++) {
                 this.addPost();
             }
             
-            // Load content into textareas
+            // Load content into input fields
             drafts.forEach(draft => {
-                const textareas = document.querySelectorAll('.thread-posts textarea');
-                if (textareas[draft.index]) {
-                    textareas[draft.index].value = draft.content;
-                    this.updateCharCounter(textareas[draft.index]);
+                if (this.inputFields[draft.index]) {
+                    // Setze den Inhalt
+                    this.inputFields[draft.index].setValue(draft.content);
+                    
+                    // Setze den Formatierungsstil, falls vorhanden
+                    if (draft.formatStyle) {
+                        this.inputFields[draft.index].setFormatStyle(draft.formatStyle);
+                    }
                 }
             });
             
@@ -158,10 +170,32 @@ class BlueskyThreadPoster {
         document.getElementById('clearCredentialsBtn').addEventListener('click', () => this.clearCredentialsAndForm());
 
         // Thread management events
-        document.getElementById('addPostBtn').addEventListener('click', () => this.addPost());
-        document.getElementById('removePostBtn').addEventListener('click', () => this.removePost());
+        document.getElementById('clearAllBtn').addEventListener('click', () => this.clearAll());
         document.getElementById('postThreadBtn').addEventListener('click', () => this.postThread());
+        document.getElementById('showGuideBtn').addEventListener('click', () => GuideModal.show());
+
+        // JSON Verwaltung
+        document.getElementById('showJsonBtn').addEventListener('click', () => this.showInputsAsJson());
         
+        // JSON-Datei laden via verstecktem File-Input
+        document.getElementById('loadJsonBtn').addEventListener('click', () => {
+            document.getElementById('jsonFileInput').click();
+        });
+        
+        document.getElementById('jsonFileInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                this.loadFromJson(file);
+                // Zurücksetzen des File-Inputs, damit die gleiche Datei erneut ausgewählt werden kann
+                event.target.value = '';
+            }
+        });
+        
+        // JSON-Code einfügen Button
+        document.getElementById('pasteJsonBtn').addEventListener('click', () => {
+            this.showJsonInputModal();
+        });
+
         // Add button events (using event delegation)
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('add-btn')) {
@@ -180,51 +214,14 @@ class BlueskyThreadPoster {
             }
         });
 
-        // Input events for character counting, auto-expansion, and draft saving
-        document.addEventListener('input', (e) => {
-            if (e.target.tagName === 'TEXTAREA' && e.target.closest('.thread-posts')) {
-                // Clean up line breaks before periods
-                const cleanedText = this.cleanupLineBreaks(e.target.value);
-                if (cleanedText !== e.target.value) {
-                    const cursorPos = e.target.selectionStart;
-                    e.target.value = cleanedText;
-                    // Restore cursor position (adjust if text was shortened)
-                    const newCursorPos = Math.min(cursorPos, cleanedText.length);
-                    e.target.setSelectionRange(newCursorPos, newCursorPos);
-                }
-                
-                this.updateCharCounter(e.target);
-                this.handleAutoExpansion(e.target);
-                
-                // Auto-save drafts with debouncing
-                clearTimeout(this.draftSaveTimeout);
-                this.draftSaveTimeout = setTimeout(() => {
-                    this.saveDrafts();
-                }, 1000); // Save 1 second after user stops typing
-            }
-        });
-        
-        // Paste events for immediate cleanup
-        document.addEventListener('paste', (e) => {
-            if (e.target.tagName === 'TEXTAREA' && e.target.closest('.thread-posts')) {
-                // Use setTimeout to allow paste to complete first
-                setTimeout(() => {
-                    const cleanedText = this.cleanupLineBreaks(e.target.value);
-                    if (cleanedText !== e.target.value) {
-                        e.target.value = cleanedText;
-                        this.updateCharCounter(e.target);
-                        this.saveDrafts();
-                    }
-                }, 10);
-            }
-        });
-
-        // Enter key handling
+        // Enter key handling - keep this global handler
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && e.ctrlKey && e.target.tagName === 'TEXTAREA') {
                 this.postThread();
             }
         });
+        
+        // Note: Input and paste events are now handled by each InputField component
     }
 
     async login() {
@@ -370,37 +367,31 @@ class BlueskyThreadPoster {
             return;
         }
 
-        const postDiv = document.createElement('div');
-        postDiv.className = 'post-input fade-in';
-        postDiv.setAttribute('data-post-index', postCount);
+        const inputField = new InputField({
+            index: postCount,
+            maxLength: this.maxPostLength,
+            onValueChange: () => {
+                clearTimeout(this.draftSaveTimeout);
+                this.draftSaveTimeout = setTimeout(() => {
+                    this.saveDrafts();
+                }, 1000);
+            },
+            onAutoExpand: (field) => {
+                const currentIndex = this.inputFields.findIndex(f => f === field);
+                if (currentIndex >= 0 && currentIndex === this.inputFields.length - 1) {
+                    // If this is the last field and it has content, add a new field
+                    this.addPost();
+                }
+            }
+        });
         
-        postDiv.innerHTML = `
-            <label>${settings.text.postLabelTemplate.replace('{index}', postCount + 1)}</label>
-            <div class="textarea-container">
-                <textarea placeholder="${settings.text.postPlaceholderTemplate.replace('{index}', postCount + 1)}" maxlength="${this.maxPostLength}" data-has-created-next="false"></textarea>
-                <div class="textarea-buttons">
-                    <select class="format-select" title="Textformatierung wählen">
-                        <option value="normal">Normal</option>
-                        <option value="bold">𝐅𝐞𝐭𝐭</option>
-                        <option value="italic">𝐼𝑡𝑎𝑙𝑖𝑐</option>
-                        <option value="script">𝒮𝒸𝓇𝒾𝓅𝓉</option>
-                    </select>
-                    <button class="add-btn" title="Neuen Post darunter hinzufügen">➕</button>
-                    <button class="remove-btn" title="Diesen Post entfernen">🗑️</button>
-                </div>
-            </div>
-            <div class="char-counter">0/${this.maxPostLength}</div>
-        `;
-
-        threadPosts.appendChild(postDiv);
+        this.inputFields.push(inputField);
+        threadPosts.appendChild(inputField.getElement());
         
-        // Update remove button visibility
-        document.getElementById('removePostBtn').style.display = postCount > 0 ? 'inline-block' : 'none';
+        // Kein Update des Remove-Buttons mehr nötig, da dieser entfernt wurde
         
         // Focus new textarea
-        postDiv.querySelector('textarea').focus();
-        
-        this.updateCharCounters();
+        // inputField.focus();
     }
 
     addPostBelow(currentPostInput) {
@@ -415,67 +406,54 @@ class BlueskyThreadPoster {
         // Find the index of the current post
         const currentIndex = parseInt(currentPostInput.getAttribute('data-post-index'));
         
-        // Create new post div
-        const postDiv = document.createElement('div');
-        postDiv.className = 'post-input fade-in';
-        postDiv.setAttribute('data-post-index', currentIndex + 1);
+        // Find position in inputFields array
+        const insertPosition = this.inputFields.findIndex(field => 
+            field.getElement() === currentPostInput || 
+            field.getElement().isEqualNode(currentPostInput));
         
-        postDiv.innerHTML = `
-            <label>${settings.text.postLabelTemplate.replace('{index}', currentIndex + 2)}</label>
-            <div class="textarea-container">
-                <textarea placeholder="${settings.text.postPlaceholderTemplate.replace('{index}', currentIndex + 2)}" maxlength="${this.maxPostLength}" data-has-created-next="false"></textarea>
-                <div class="textarea-buttons">
-                    <select class="format-select" title="Textformatierung wählen">
-                        <option value="normal">Normal</option>
-                        <option value="bold">𝐅𝐞𝐭𝐭</option>
-                        <option value="italic">𝐼𝑡𝑎𝑙𝑖𝑐</option>
-                        <option value="script">𝒮𝒸𝓇𝒾𝓅𝓉</option>
-                    </select>
-                    <button class="add-btn" title="Neuen Post darunter hinzufügen">➕</button>
-                    <button class="remove-btn" title="Diesen Post entfernen">🗑️</button>
-                </div>
-            </div>
-            <div class="char-counter">0/${this.maxPostLength}</div>
-        `;
-
-        // Insert the new post after the current one
-        currentPostInput.insertAdjacentElement('afterend', postDiv);
+        if (insertPosition === -1) {
+            console.error('Could not find input field for insertion position');
+            return;
+        }
+        
+        // Create new input field
+        const inputField = new InputField({
+            index: currentIndex + 1,
+            maxLength: this.maxPostLength,
+            onValueChange: () => {
+                clearTimeout(this.draftSaveTimeout);
+                this.draftSaveTimeout = setTimeout(() => {
+                    this.saveDrafts();
+                }, 1000);
+            },
+            onAutoExpand: (field) => {
+                const idx = this.inputFields.findIndex(f => f === field);
+                if (idx >= 0 && idx === this.inputFields.length - 1) {
+                    // If this is the last field and it has content, add a new field
+                    this.addPost();
+                }
+            }
+        });
+        
+        // Insert the new input field after the current one
+        currentPostInput.insertAdjacentElement('afterend', inputField.getElement());
+        
+        // Update our inputFields array
+        this.inputFields.splice(insertPosition + 1, 0, inputField);
         
         // Update indices of all posts after the inserted one
         this.reindexPosts();
         
-        // Update remove button visibility
-        document.getElementById('removePostBtn').style.display = threadPosts.children.length > 1 ? 'inline-block' : 'none';
+        // Kein Update des Remove-Buttons mehr nötig, da dieser entfernt wurde
         
         // Focus new textarea
-        postDiv.querySelector('textarea').focus();
-        
-        this.updateCharCounters();
+        // inputField.focus();
     }
 
     reindexPosts() {
-        const threadPosts = document.getElementById('threadPosts');
-        const postInputs = threadPosts.querySelectorAll('.post-input');
-        
-        postInputs.forEach((postInput, index) => {
-            // Update data-post-index attribute
-            postInput.setAttribute('data-post-index', index);
-            
-            // Update label text
-            const label = postInput.querySelector('label');
-            if (index === 0) {
-                label.textContent = settings.text.mainPostLabel;
-            } else {
-                label.textContent = settings.text.postLabelTemplate.replace('{index}', index + 1);
-            }
-            
-            // Update placeholder text
-            const textarea = postInput.querySelector('textarea');
-            if (index === 0) {
-                textarea.placeholder = settings.text.mainPostPlaceholder;
-            } else {
-                textarea.placeholder = settings.text.postPlaceholderTemplate.replace('{index}', index + 1);
-            }
+        // Update all InputField components with new indices
+        this.inputFields.forEach((inputField, index) => {
+            inputField.setIndex(index);
         });
     }
 
@@ -489,20 +467,27 @@ class BlueskyThreadPoster {
             return;
         }
         
-        // Remove the post
-        postInput.remove();
-        
-        // Update indices of all remaining posts
-        this.reindexPosts();
-        
-        // Update remove button visibility
-        const remainingCount = threadPosts.children.length;
-        document.getElementById('removePostBtn').style.display = remainingCount > 1 ? 'inline-block' : 'none';
-        
-        // Update character counters
-        this.updateCharCounters();
-        
-        this.showStatus('Post entfernt', 'success');
+        // Find and remove the InputField component
+        const removeIndex = this.inputFields.findIndex(field => 
+            field.getElement() === postInput || 
+            field.getElement().isEqualNode(postInput));
+            
+        if (removeIndex !== -1) {
+            // Remove element from DOM
+            postInput.remove();
+            
+            // Remove from our array
+            this.inputFields.splice(removeIndex, 1);
+            
+            // Update indices of all remaining posts
+            this.reindexPosts();
+            
+            // Update remove button visibility
+            const remainingCount = threadPosts.children.length;
+            document.getElementById('removePostBtn').style.display = remainingCount > 1 ? 'inline-block' : 'none';
+            
+            this.showStatus('Post entfernt', 'success');
+        }
     }
 
     removePost() {
@@ -510,7 +495,13 @@ class BlueskyThreadPoster {
         const postCount = threadPosts.children.length;
         
         if (postCount > 1) {
+            // Remove the last InputField from DOM
             threadPosts.removeChild(threadPosts.lastElementChild);
+            
+            // Remove from our array
+            if (this.inputFields.length > 0) {
+                this.inputFields.pop();
+            }
         }
         
         // Update remove button visibility
@@ -518,88 +509,8 @@ class BlueskyThreadPoster {
     }
 
     updateCharCounters() {
-        const textareas = document.querySelectorAll('textarea');
-        textareas.forEach(textarea => this.updateCharCounter(textarea));
-    }
-
-    cleanupLineBreaks(text) {
-        // Remove line breaks directly before periods
-        return text.replace(/\n+\./g, '.');
-    }
-
-    updateCharCounter(textarea) {
-        // Find the counter in the post-input container (parent of textarea-container)
-        const postInput = textarea.closest('.post-input');
-        const counter = postInput ? postInput.querySelector('.char-counter') : null;
-        
-        if (!counter) {
-            console.warn('Character counter not found for textarea');
-            return;
-        }
-        
-        const length = textarea.value.length;
-        const maxLength = this.maxPostLength;
-        
-        counter.textContent = `${length}/${maxLength}`;
-        
-        // Update counter styling based on character count
-        counter.classList.remove('warning', 'danger');
-        if (length > maxLength * settings.showCharacterDangerAt) {
-            counter.classList.add('danger');
-        } else if (length > maxLength * settings.showCharacterWarningAt) {
-            counter.classList.add('warning');
-        }
-    }
-
-    handleAutoExpansion(textarea) {
-        // Check if this textarea has already created a next one
-        const hasCreatedNext = textarea.getAttribute('data-has-created-next') === 'true';
-        
-        // Only proceed if there's content and we haven't created a next textarea yet
-        if (textarea.value.trim().length > 0 && !hasCreatedNext) {
-            const threadPosts = document.getElementById('threadPosts');
-            const currentPostDiv = textarea.closest('.post-input');
-            const currentIndex = parseInt(currentPostDiv.getAttribute('data-post-index'));
-            
-            // Check if there's already an empty textarea after this one
-            const nextSibling = currentPostDiv.nextElementSibling;
-            if (nextSibling && nextSibling.classList.contains('post-input')) {
-                const nextTextarea = nextSibling.querySelector('textarea');
-                if (nextTextarea && nextTextarea.value.trim() === '') {
-                    // There's already an empty textarea below, don't create another
-                    return;
-                }
-            }
-            
-            // Check if we've reached the maximum number of posts (soft limit for performance)
-            if (threadPosts.children.length >= settings.maxPostsPerThread) {
-                return;
-            }
-            
-            // Mark this textarea as having created the next one
-            textarea.setAttribute('data-has-created-next', 'true');
-            
-            // Create new post div
-            const newIndex = currentIndex + 1;
-            const newPostDiv = document.createElement('div');
-            newPostDiv.className = 'post-input fade-in';
-            newPostDiv.setAttribute('data-post-index', newIndex);
-            
-            newPostDiv.innerHTML = `
-                <label>${settings.text.postLabelTemplate.replace('{index}', newIndex + 1)}</label>
-                <textarea placeholder="${settings.text.postPlaceholderTemplate.replace('{index}', newIndex + 1)}" maxlength="${this.maxPostLength}" data-has-created-next="false"></textarea>
-                <div class="char-counter">0/${this.maxPostLength}</div>
-            `;
-            
-            // Insert the new post div after the current one
-            currentPostDiv.insertAdjacentElement('afterend', newPostDiv);
-            
-            // Update remove button visibility
-            document.getElementById('removePostBtn').style.display = 'inline-block';
-            
-            // Update character counter for the new textarea
-            this.updateCharCounters();
-        }
+        // This is now handled by each InputField component
+        // Keep this method for backward compatibility but it's no longer needed
     }
 
     async postThread() {
@@ -608,19 +519,8 @@ class BlueskyThreadPoster {
             return;
         }
 
-        const postInputs = document.querySelectorAll('.post-input');
-        const posts = Array.from(postInputs)
-            .map(postInput => {
-                const textarea = postInput.querySelector('textarea');
-                const formatSelect = postInput.querySelector('.format-select');
-                const text = textarea.value.trim();
-                
-                if (text.length === 0) return null;
-                
-                // Apply formatting based on selectbox value
-                const formatStyle = formatSelect ? formatSelect.value : 'normal';
-                return formatText(text, formatStyle);
-            })
+        const posts = this.inputFields
+            .map(inputField => inputField.getFormattedValue())
             .filter(text => text !== null);
 
         if (posts.length === 0) {
@@ -665,22 +565,23 @@ class BlueskyThreadPoster {
             this.hideProgressModal();
             this.showStatus(`Thread mit ${successfulPosts} Posts erfolgreich gepostet! 🎉`, 'success');
             
-            // Clear all textareas only if all posts were successful
+            // Clear all input fields only if all posts were successful
             if (successfulPosts === posts.length) {
-                textareas.forEach(textarea => {
-                    textarea.value = '';
-                    textarea.setAttribute('data-has-created-next', 'false');
-                });
-                this.updateCharCounters();
-                
                 // Clear saved drafts since posting was successful
                 this.clearDrafts();
                 
                 // Reset to single post input
                 const threadPosts = document.getElementById('threadPosts');
-                while (threadPosts.children.length > 1) {
-                    threadPosts.removeChild(threadPosts.lastElementChild);
+                
+                // Clear all input fields
+                while (threadPosts.firstChild) {
+                    threadPosts.removeChild(threadPosts.firstChild);
                 }
+                this.inputFields = [];
+                
+                // Add a single empty input field
+                this.addPost();
+                
                 document.getElementById('removePostBtn').style.display = 'none';
             }
 
@@ -864,6 +765,201 @@ class BlueskyThreadPoster {
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = seconds % 60;
         return minutes + 'm ' + remainingSeconds + 's';
+    }
+    
+    showInputsAsJson() {
+        try {
+            // Sammle alle Eingaben und ihre Formatierungen
+            const inputs = this.inputFields.map((field, index) => {
+                const content = field.getValue().trim();
+                const formatStyle = field.getFormatStyle();
+                const formattedText = field.getFormattedValue();
+                
+                return {
+                    index,
+                    content,
+                    formatStyle,
+                    formattedText: formattedText || '',
+                    charCount: content.length,
+                    formattedCharCount: formattedText ? formattedText.length : 0
+                };
+            }).filter(input => input.content !== '');
+            
+            // Verwende die neue showJSON-Methode mit Kopieren- und Download-Buttons
+            Modal.showJSON('Eingaben als JSON', inputs);
+        } catch (error) {
+            console.error('Fehler beim Erstellen des JSON:', error);
+            this.showStatus('Fehler beim Erstellen des JSON: ' + error.message, 'error');
+        }
+    }
+    
+    clearAll() {
+        try {
+            // Verwende die neue clearInputFields-Methode
+            this.clearInputFields();
+            
+            // Füge einen leeren Post hinzu
+            this.addPost();
+            
+            // Status anzeigen
+            this.showStatus('Alle Eingaben gelöscht', 'success');
+            
+            // Entferne Posts aus localStorage
+            localStorage.removeItem(settings.localStorage.draftsKey);
+        } catch (error) {
+            console.error('Fehler beim Löschen aller Eingaben:', error);
+            this.showStatus('Fehler beim Löschen aller Eingaben: ' + error.message, 'error');
+        }
+    }
+    
+    loadFromJson(jsonFile) {
+        try {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const jsonData = JSON.parse(e.target.result);
+                    this.processJsonData(jsonData);
+                } catch (error) {
+                    console.error('Fehler beim Parsen der JSON-Datei:', error);
+                    this.showStatus('Fehler beim Laden der JSON-Datei: ' + error.message, 'error');
+                }
+            };
+            
+            reader.onerror = () => {
+                this.showStatus('Fehler beim Lesen der Datei', 'error');
+            };
+            
+            // Datei als Text lesen
+            reader.readAsText(jsonFile);
+            
+        } catch (error) {
+            console.error('Fehler beim Laden der JSON-Datei:', error);
+            this.showStatus('Fehler beim Laden der JSON-Datei: ' + error.message, 'error');
+        }
+    }
+    
+    processJsonData(jsonData) {
+        try {
+            // Validiere JSON-Struktur
+            if (!Array.isArray(jsonData)) {
+                throw new Error('Die JSON-Daten müssen ein Array enthalten');
+            }
+            
+            if (jsonData.length === 0) {
+                this.showStatus('Das JSON-Array enthält keine Elemente', 'warning');
+                return; // Nichts zu tun, wenn Array leer ist
+            }
+            
+            // Prüfe, ob es sich um ein Array aus Strings oder ein Array aus Objekten handelt
+            const isStringArray = typeof jsonData[0] === 'string';
+            
+            // Sammle zuerst alle Daten, bevor wir die DOM-Manipulation durchführen
+            const postsData = jsonData.map(item => {
+                if (isStringArray) {
+                    return { content: item };
+                } else {
+                    return {
+                        content: item.content || '',
+                        formatStyle: item.formatStyle || 'normal'
+                    };
+                }
+            });
+            
+            // Füge Eingabefelder hinzu (an bestehende anhängen)
+            const startIndex = this.inputFields.length;
+            
+            // Für jeden neuen Eintrag ein Eingabefeld hinzufügen
+            for (let i = 0; i < postsData.length; i++) {
+                const currentIndex = startIndex + i;
+                
+                // Wenn es der erste Eintrag ist und noch keine Eingabefelder existieren
+                if (currentIndex === 0) {
+                    this.addPost(); // Erstes Feld hinzufügen
+                } else if (currentIndex >= this.inputFields.length) {
+                    // Nur ein neues Feld hinzufügen, wenn nötig
+                    this.addPost();
+                }
+                
+                // Inhalt setzen
+                if (this.inputFields[currentIndex]) {
+                    if (postsData[i].content) {
+                        this.inputFields[currentIndex].setValue(postsData[i].content);
+                    }
+                    
+                    if (postsData[i].formatStyle && !isStringArray) {
+                        this.inputFields[currentIndex].setFormatStyle(postsData[i].formatStyle);
+                    }
+                }
+            }
+            
+            this.showStatus(`${postsData.length} Einträge aus JSON angehängt`, 'success');
+        } catch (error) {
+            console.error('Fehler bei der Verarbeitung der JSON-Daten:', error);
+            this.showStatus('Fehler bei der Verarbeitung der JSON-Daten: ' + error.message, 'error');
+        }
+    }
+    
+    clearInputFields() {
+        try {
+            // Lösche alle Eingabefelder aus dem DOM
+            const threadPosts = document.getElementById('threadPosts');
+            while (threadPosts && threadPosts.firstChild) {
+                threadPosts.removeChild(threadPosts.firstChild);
+            }
+            
+            // Leere das inputFields-Array
+            this.inputFields = [];
+        } catch (error) {
+            console.error('Fehler beim Löschen der Eingabefelder:', error);
+            throw error;
+        }
+    }
+    
+    showJsonInputModal() {
+        // Modal mit Textarea erstellen
+        const modal = new Modal();
+        modal.setTitle('JSON-Code einfügen');
+        
+        // Textarea zum Einfügen von JSON erstellen
+        const textareaHtml = `
+            <div class="json-paste-container">
+                <textarea id="jsonInput" class="json-paste-textarea" placeholder='[
+  "Hier den ersten Text eingeben",
+  "Hier den zweiten Text eingeben"
+]'></textarea>
+            </div>
+        `;
+        
+        modal.setContent(textareaHtml);
+        
+        // Löschen-Button hinzufügen
+        modal.clearActionButtons();
+        modal.addActionButton('Löschen', () => {
+            document.getElementById('jsonInput').value = '';
+        }, 'btn btn-secondary');
+        
+        // Übernehmen-Button hinzufügen
+        modal.addActionButton('JSON übernehmen', () => {
+            const jsonInput = document.getElementById('jsonInput');
+            const jsonText = jsonInput.value.trim();
+            
+            if (!jsonText) {
+                this.showStatus('Kein JSON-Code eingegeben', 'error');
+                return;
+            }
+            
+            try {
+                const jsonData = JSON.parse(jsonText);
+                this.processJsonData(jsonData);
+                modal.hide();
+            } catch (error) {
+                console.error('Fehler beim Parsen des JSON-Codes:', error);
+                this.showStatus('Fehler beim Parsen des JSON-Codes: ' + error.message, 'error');
+            }
+        }, 'btn btn-primary');
+        
+        // Modal anzeigen
+        modal.show();
     }
 }
 
